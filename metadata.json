@@ -1,0 +1,7 @@
+{
+  "name": "ZenPomodoro Professional",
+  "description": "A high-performance, minimalist Pomodoro application with advanced cycle management, configurable timers, and a sleek modern UI designed for deep work.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
