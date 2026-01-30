@@ -1,10 +1,11 @@
 
-import { TaskHistoryItem, PlannedTask } from '../types';
+import { TaskHistoryItem, PlannedTask, TaskGroup } from '../types';
 
 const DB_NAME = 'ZenPomoDB';
 const STORE_HISTORY = 'history';
 const STORE_TASKS = 'planned_tasks';
-const DB_VERSION = 2; // Incrementar versión para nueva store
+const STORE_GROUPS = 'task_groups';
+const DB_VERSION = 3; // Incrementar versión para nueva store de grupos
 
 export const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -22,6 +23,10 @@ export const initDB = (): Promise<IDBDatabase> => {
 
       if (!db.objectStoreNames.contains(STORE_TASKS)) {
         db.createObjectStore(STORE_TASKS, { keyPath: 'id' });
+      }
+
+      if (!db.objectStoreNames.contains(STORE_GROUPS)) {
+        db.createObjectStore(STORE_GROUPS, { keyPath: 'id' });
       }
     };
 
@@ -45,7 +50,7 @@ export const saveHistoryItem = async (item: TaskHistoryItem): Promise<void> => {
 
 export const getAllHistory = async (): Promise<TaskHistoryItem[]> => {
   const db = await initDB();
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const transaction = db.transaction([STORE_HISTORY], 'readonly');
     const store = transaction.objectStore(STORE_HISTORY);
     const request = store.getAll();
@@ -84,6 +89,28 @@ export const getPlannedTasks = async (): Promise<PlannedTask[]> => {
   return new Promise((resolve) => {
     const transaction = db.transaction([STORE_TASKS], 'readonly');
     const request = transaction.objectStore(STORE_TASKS).getAll();
+    request.onsuccess = () => resolve(request.result);
+  });
+};
+
+// --- Operaciones de Grupos ---
+export const saveTaskGroup = async (group: TaskGroup): Promise<void> => {
+  const db = await initDB();
+  const transaction = db.transaction([STORE_GROUPS], 'readwrite');
+  transaction.objectStore(STORE_GROUPS).put(group);
+};
+
+export const deleteTaskGroup = async (id: string): Promise<void> => {
+  const db = await initDB();
+  const transaction = db.transaction([STORE_GROUPS], 'readwrite');
+  transaction.objectStore(STORE_GROUPS).delete(id);
+};
+
+export const getTaskGroups = async (): Promise<TaskGroup[]> => {
+  const db = await initDB();
+  return new Promise((resolve) => {
+    const transaction = db.transaction([STORE_GROUPS], 'readonly');
+    const request = transaction.objectStore(STORE_GROUPS).getAll();
     request.onsuccess = () => resolve(request.result);
   });
 };

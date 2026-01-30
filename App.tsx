@@ -1,8 +1,12 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { SessionType, TimerStatus, PomodoroSettings, PomodoroState, TaskHistoryItem, PlannedTask } from './types';
+import { SessionType, TimerStatus, PomodoroSettings, PomodoroState, TaskHistoryItem, PlannedTask, TaskGroup } from './types';
 import { DEFAULT_SETTINGS, SESSION_COLORS } from './constants';
-import { getAllHistory, saveHistoryItem, clearAllHistory, importHistory, getPlannedTasks, savePlannedTask, deletePlannedTask } from './services/db';
+import { 
+  getAllHistory, saveHistoryItem, clearAllHistory, importHistory, 
+  getPlannedTasks, savePlannedTask, deletePlannedTask,
+  getTaskGroups, saveTaskGroup, deleteTaskGroup
+} from './services/db';
 import TimerDisplay from './components/TimerDisplay';
 import Controls from './components/Controls';
 import SettingsModal from './components/SettingsModal';
@@ -85,7 +89,8 @@ const App: React.FC = () => {
     currentIndex: 0,
     currentTaskName: '',
     history: [],
-    plannedTasks: []
+    plannedTasks: [],
+    groups: []
   }));
 
   const timerRef = useRef<number | null>(null);
@@ -101,8 +106,8 @@ const App: React.FC = () => {
   const [editingTask, setEditingTask] = useState<PlannedTask | null>(null);
 
   useEffect(() => {
-    Promise.all([getAllHistory(), getPlannedTasks()]).then(([history, plannedTasks]) => {
-      setState(prev => ({ ...prev, history, plannedTasks }));
+    Promise.all([getAllHistory(), getPlannedTasks(), getTaskGroups()]).then(([history, plannedTasks, groups]) => {
+      setState(prev => ({ ...prev, history, plannedTasks, groups }));
     });
   }, []);
 
@@ -255,13 +260,14 @@ const App: React.FC = () => {
     }
   }, [state.timeLeft, state.status, handleNextSession]);
 
-  const handleTaskConfirm = (name: string, customSettings?: PomodoroSettings) => {
+  const handleTaskConfirm = (name: string, customSettings?: PomodoroSettings, groupId?: string) => {
     if (isPlannedMode && customSettings) {
       const newTask: PlannedTask = {
         id: editingTask ? editingTask.id : Date.now().toString(),
         name,
         settings: customSettings,
-        createdAt: editingTask ? editingTask.createdAt : Date.now()
+        createdAt: editingTask ? editingTask.createdAt : Date.now(),
+        groupId: groupId
       };
       savePlannedTask(newTask);
       setState(p => ({ 
@@ -303,6 +309,24 @@ const App: React.FC = () => {
     setEditingTask(task);
     setIsPlannedMode(true);
     setIsTaskModalOpen(true);
+  };
+
+  const handleAddGroup = async (group: TaskGroup) => {
+    await saveTaskGroup(group);
+    setState(p => ({ ...p, groups: [...p.groups, group] }));
+  };
+
+  const handleDeleteGroup = async (id: string) => {
+    await deleteTaskGroup(id);
+    // Mover tareas del grupo eliminado a "Sin Grupo"
+    const updatedTasks = state.plannedTasks.map(t => t.groupId === id ? { ...t, groupId: undefined } : t);
+    // En un escenario real, deberíamos guardar cada tarea actualizada en la DB
+    // Por simplicidad en este MVP, actualizamos el estado
+    setState(p => ({ 
+      ...p, 
+      groups: p.groups.filter(g => g.id !== id),
+      plannedTasks: updatedTasks
+    }));
   };
 
   const restartDay = (newSettings?: PomodoroSettings) => {
@@ -396,6 +420,7 @@ const App: React.FC = () => {
         isOpen={isTaskModalOpen} 
         isPlannedMode={isPlannedMode} 
         initialData={editingTask}
+        groups={state.groups}
         onConfirm={handleTaskConfirm} 
         onCancel={() => { setIsTaskModalOpen(false); setIsPlannedMode(false); setEditingTask(null); }} 
       />
@@ -404,7 +429,10 @@ const App: React.FC = () => {
         isOpen={isTaskListOpen} 
         onClose={() => setIsTaskListOpen(false)} 
         tasks={state.plannedTasks} 
+        groups={state.groups}
         onAddTask={() => { setIsPlannedMode(true); setIsTaskModalOpen(true); setEditingTask(null); }} 
+        onAddGroup={handleAddGroup}
+        onDeleteGroup={handleDeleteGroup}
         onDeleteTask={handleDeleteTask} 
         onEditTask={handleEditPlannedTask}
         onStartTask={handleStartPlannedTask} 

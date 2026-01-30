@@ -1,14 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { PomodoroSettings, PlannedTask } from '../types';
+import { PomodoroSettings, PlannedTask, TaskGroup } from '../types';
 import { DEFAULT_SETTINGS } from '../constants';
 
 interface TaskModalProps {
   isOpen: boolean;
-  onConfirm: (taskName: string, settings?: PomodoroSettings) => void;
+  onConfirm: (taskName: string, settings?: PomodoroSettings, groupId?: string) => void;
   onCancel: () => void;
   isPlannedMode?: boolean;
   initialData?: PlannedTask | null;
+  groups?: TaskGroup[];
 }
 
 const TimeInputGroup: React.FC<{
@@ -54,18 +55,21 @@ const TimeInputGroup: React.FC<{
   );
 };
 
-const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onConfirm, onCancel, isPlannedMode, initialData }) => {
+const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onConfirm, onCancel, isPlannedMode, initialData, groups = [] }) => {
   const [taskName, setTaskName] = useState('');
   const [localSettings, setLocalSettings] = useState<PomodoroSettings>(DEFAULT_SETTINGS);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
         setTaskName(initialData.name);
         setLocalSettings(initialData.settings);
+        setSelectedGroupId(initialData.groupId);
       } else {
         setTaskName('');
         setLocalSettings(DEFAULT_SETTINGS);
+        setSelectedGroupId(undefined);
       }
     }
   }, [isOpen, initialData]);
@@ -88,12 +92,11 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onConfirm, onCancel, isPl
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (taskName.trim()) {
-      // Validar que al menos el tiempo de enfoque sea > 0
       const finalSettings = isPlannedMode ? {
         ...localSettings,
         workTime: Math.max(1, localSettings.workTime)
       } : undefined;
-      onConfirm(taskName, finalSettings);
+      onConfirm(taskName, finalSettings, selectedGroupId);
     }
   };
 
@@ -110,7 +113,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onConfirm, onCancel, isPl
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Configuración personalizada</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre del Objetivo</label>
             <input 
@@ -124,54 +127,73 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onConfirm, onCancel, isPl
           </div>
 
           {isPlannedMode && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <TimeInputGroup 
-                label="Tiempo de Pomodoro" 
-                totalSeconds={localSettings.workTime} 
-                accentColor="rose-500"
-                onChange={(unit, val) => handleTimeUpdate('workTime', unit, val)} 
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <TimeInputGroup 
-                  label="Descanso Corto" 
-                  totalSeconds={localSettings.shortBreakTime} 
-                  accentColor="emerald-500"
-                  onChange={(unit, val) => handleTimeUpdate('shortBreakTime', unit, val)} 
-                />
-                <TimeInputGroup 
-                  label="Descanso Largo" 
-                  totalSeconds={localSettings.longBreakTime} 
-                  accentColor="sky-500"
-                  onChange={(unit, val) => handleTimeUpdate('longBreakTime', unit, val)} 
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-2">
+            <>
+              {groups.length > 0 && (
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Repeticiones de Pomodoro</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Grupo de Tarea</label>
                   <div className="relative">
-                    <input 
-                      type="number" value={localSettings.pomsPerSet} min="1" 
-                      onChange={e => setLocalSettings(p => ({...p, pomsPerSet: parseInt(e.target.value) || 1}))}
-                      className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 text-sm focus:ring-2 focus:ring-indigo-500/10" 
-                    />
-                    <i className="fa-solid fa-apple-whole absolute right-4 top-1/2 -translate-y-1/2 text-slate-200 text-xs"></i>
+                    <select 
+                      value={selectedGroupId || ''} 
+                      onChange={e => setSelectedGroupId(e.target.value || undefined)}
+                      className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 font-bold text-slate-700 appearance-none focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                    >
+                      <option value="">Sin grupo</option>
+                      {groups.map(g => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                    <i className="fa-solid fa-chevron-down absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none"></i>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ciclos de Descanso</label>
-                  <div className="relative">
-                    <input 
-                      type="number" value={localSettings.setsGoal} min="0" 
-                      onChange={e => setLocalSettings(p => ({...p, setsGoal: parseInt(e.target.value) || 0}))}
-                      className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 text-sm focus:ring-2 focus:ring-indigo-500/10" 
-                    />
-                    <i className="fa-solid fa-mug-hot absolute right-4 top-1/2 -translate-y-1/2 text-slate-200 text-xs"></i>
+              )}
+
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <TimeInputGroup 
+                  label="Tiempo de Pomodoro" 
+                  totalSeconds={localSettings.workTime} 
+                  accentColor="rose-500"
+                  onChange={(unit, val) => handleTimeUpdate('workTime', unit, val)} 
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <TimeInputGroup 
+                    label="Descanso Corto" 
+                    totalSeconds={localSettings.shortBreakTime} 
+                    accentColor="emerald-500"
+                    onChange={(unit, val) => handleTimeUpdate('shortBreakTime', unit, val)} 
+                  />
+                  <TimeInputGroup 
+                    label="Descanso Largo" 
+                    totalSeconds={localSettings.longBreakTime} 
+                    accentColor="sky-500"
+                    onChange={(unit, val) => handleTimeUpdate('longBreakTime', unit, val)} 
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Repeticiones</label>
+                    <div className="relative">
+                      <input 
+                        type="number" value={localSettings.pomsPerSet} min="1" 
+                        onChange={e => setLocalSettings(p => ({...p, pomsPerSet: parseInt(e.target.value) || 1}))}
+                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 text-sm focus:ring-2 focus:ring-indigo-500/10" 
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ciclos</label>
+                    <div className="relative">
+                      <input 
+                        type="number" value={localSettings.setsGoal} min="0" 
+                        onChange={e => setLocalSettings(p => ({...p, setsGoal: parseInt(e.target.value) || 0}))}
+                        className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 font-bold text-slate-700 text-sm focus:ring-2 focus:ring-indigo-500/10" 
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </>
           )}
           
           <div className="flex gap-3 pt-4">
@@ -187,7 +209,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onConfirm, onCancel, isPl
               disabled={!taskName.trim()} 
               className="flex-[1.5] bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-slate-800 transition-all disabled:opacity-30 text-xs shadow-xl shadow-slate-200 uppercase tracking-widest"
             >
-              {isPlannedMode ? (initialData ? 'Actualizar Plan' : 'Guardar Plan') : 'Empezar ahora'}
+              {isPlannedMode ? (initialData ? 'Actualizar' : 'Guardar') : 'Empezar'}
             </button>
           </div>
         </form>

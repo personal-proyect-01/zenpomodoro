@@ -20,11 +20,18 @@ export interface PomodoroSettings {
   setsGoal: number;      
 }
 
+export interface TaskGroup {
+  id: string;
+  name: string;
+  color: string; // Hex o clase Tailwind
+}
+
 export interface PlannedTask {
   id: string;
   name: string;
   settings: PomodoroSettings;
   createdAt: number;
+  groupId?: string; // ID del grupo al que pertenece
 }
 
 export interface TaskHistoryItem {
@@ -44,4 +51,5 @@ export interface PomodoroState {
   currentTaskName: string;
   history: TaskHistoryItem[];
   plannedTasks: PlannedTask[];
+  groups: TaskGroup[];
 }
