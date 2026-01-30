@@ -60,9 +60,14 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({ isOpen, onClose, histor
       <aside className={`fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-[-20px_0_50px_rgba(0,0,0,0.05)] z-[80] transition-transform duration-700 ease-[cubic-bezier(0.2,1,0.2,1)] ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="h-full flex flex-col p-8 sm:p-10">
           <div className="flex justify-between items-center mb-10">
-            <div>
-              <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Historial</h2>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Registro de rendimiento</p>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 shadow-sm">
+                <i className="fa-solid fa-apple-whole text-lg"></i>
+              </div>
+              <div>
+                <h2 className="text-3xl font-black text-slate-800 tracking-tighter">Historial</h2>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Registro de rendimiento</p>
+              </div>
             </div>
             <button onClick={onClose} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all hover:rotate-90"><i className="fa-solid fa-xmark"></i></button>
           </div>

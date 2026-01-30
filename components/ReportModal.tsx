@@ -71,9 +71,14 @@ const ReportModal: React.FC<ReportModalProps> = ({ isOpen, onClose, history, pla
         {/* Header del Calendario */}
         <div className="p-8 border-b border-slate-50 flex flex-col gap-6">
           <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-black text-slate-800 tracking-tight">Reporte de Enfoque</h2>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Análisis por Objetivo</p>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 shadow-sm">
+                <i className="fa-solid fa-apple-whole text-lg"></i>
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Reporte de Enfoque</h2>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Análisis por Objetivo</p>
+              </div>
             </div>
             <button onClick={onClose} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors">
               <i className="fa-solid fa-xmark"></i>
