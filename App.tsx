@@ -1,14 +1,17 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { SessionType, TimerStatus, PomodoroSettings, PomodoroState, TaskHistoryItem } from './types';
+import { SessionType, TimerStatus, PomodoroSettings, PomodoroState, TaskHistoryItem, PlannedTask } from './types';
 import { DEFAULT_SETTINGS, SESSION_COLORS } from './constants';
+import { getAllHistory, saveHistoryItem, clearAllHistory, importHistory, getPlannedTasks, savePlannedTask, deletePlannedTask } from './services/db';
 import TimerDisplay from './components/TimerDisplay';
 import Controls from './components/Controls';
 import SettingsModal from './components/SettingsModal';
 import SessionIndicator from './components/SessionIndicator';
 import TaskModal from './components/TaskModal';
 import HistorySidebar from './components/HistorySidebar';
+import TaskListSidebar from './components/TaskListSidebar';
 import ManualModal from './components/ManualModal';
+import ReportModal from './components/ReportModal';
 
 const Confetti: React.FC = () => {
   return (
@@ -20,7 +23,6 @@ const Confetti: React.FC = () => {
         const duration = Math.random() * 3 + 2;
         const colors = ['#F43F5E', '#10B981', '#0EA5E9', '#F59E0B', '#8B5CF6'];
         const color = colors[Math.floor(Math.random() * colors.length)];
-        
         return (
           <div
             key={i}
@@ -75,43 +77,47 @@ const App: React.FC = () => {
 
   const roadmap = useMemo(() => generateRoadmap(settings), [settings]);
 
-  const [state, setState] = useState<PomodoroState>(() => {
-    const savedHistory = localStorage.getItem('zen-pomo-history-v2');
-    return {
-      currentSession: SessionType.WORK,
-      status: TimerStatus.IDLE,
-      timeLeft: settings.workTime * 60,
-      completedPomodoros: 0,
-      currentIndex: 0,
-      currentTaskName: '',
-      history: savedHistory ? JSON.parse(savedHistory) : [],
-    };
-  });
+  const [state, setState] = useState<PomodoroState>(() => ({
+    currentSession: SessionType.WORK,
+    status: TimerStatus.IDLE,
+    timeLeft: settings.workTime,
+    completedPomodoros: 0,
+    currentIndex: 0,
+    currentTaskName: '',
+    history: [],
+    plannedTasks: []
+  }));
 
   const timerRef = useRef<number | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  
-  // Ref para evitar doble reproducción del audio de victoria
   const hasAnnouncedVictoryRef = useRef<boolean>(false);
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isTaskListOpen, setIsTaskListOpen] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isPlannedMode, setIsPlannedMode] = useState(false);
+  const [editingTask, setEditingTask] = useState<PlannedTask | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('zen-pomo-history-v2', JSON.stringify(state.history));
-  }, [state.history]);
+    Promise.all([getAllHistory(), getPlannedTasks()]).then(([history, plannedTasks]) => {
+      setState(prev => ({ ...prev, history, plannedTasks }));
+    });
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('zen-pomo-settings-v2', JSON.stringify(settings));
   }, [settings]);
 
   useEffect(() => {
-    const mins = Math.floor(state.timeLeft / 60);
-    const secs = state.timeLeft % 60;
-    const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    const h = Math.floor(state.timeLeft / 3600);
+    const m = Math.floor((state.timeLeft % 3600) / 60);
+    const s = state.timeLeft % 60;
+    
+    const timeStr = h > 0 
+      ? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+      : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     
     if (state.status === TimerStatus.RUNNING) {
       document.title = `[${timeStr}] ZenPomo`;
@@ -122,102 +128,23 @@ const App: React.FC = () => {
     }
   }, [state.timeLeft, state.status]);
 
-  const togglePiP = async () => {
-    try {
-      if (!videoRef.current || !canvasRef.current) return;
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-      } else {
-        if (!video.srcObject) {
-          const stream = (canvas as any).captureStream(30);
-          video.srcObject = stream;
-        }
-        try {
-          await video.play();
-        } catch (playError: any) {
-          if (playError.name !== 'AbortError') throw playError;
-        }
-        await video.requestPictureInPicture();
-      }
-    } catch (error: any) {
-      console.error("Error al iniciar PiP:", error);
-    }
-  };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const draw = () => {
-      const mins = Math.floor(state.timeLeft / 60);
-      const secs = state.timeLeft % 60;
-      const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-      ctx.fillStyle = '#0F172A';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      const sessionColor = SESSION_COLORS[state.currentSession].hex;
-      const totalSeconds = state.currentSession === SessionType.WORK 
-        ? settings.workTime * 60 
-        : state.currentSession === SessionType.SHORT_BREAK 
-          ? settings.shortBreakTime * 60 
-          : settings.longBreakTime * 60;
-      const progress = (state.timeLeft / totalSeconds);
-      ctx.beginPath();
-      ctx.arc(100, 100, 80, 0, Math.PI * 2);
-      ctx.strokeStyle = '#1E293B';
-      ctx.lineWidth = 10;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(100, 100, 80, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * progress));
-      ctx.strokeStyle = sessionColor;
-      ctx.lineWidth = 10;
-      ctx.lineCap = 'round';
-      ctx.stroke();
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 36px JetBrains Mono, monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(timeStr, 100, 100);
-      ctx.font = 'bold 12px Inter, sans-serif';
-      ctx.fillStyle = '#64748B';
-      ctx.fillText(state.currentSession.replace('_', ' '), 100, 135);
-    };
-
-    const animFrame = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(animFrame);
-  }, [state.timeLeft, state.currentSession, settings]);
-
   const playVictoryAnnouncement = () => {
-    // Si ya se anunció la victoria para este ciclo, salimos
     if (hasAnnouncedVictoryRef.current) return;
     hasAnnouncedVictoryRef.current = true;
-
-    // 1. Reproducir sonido de fanfarria
     const fanfarria = new Audio('https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3');
     fanfarria.volume = 0.5;
     fanfarria.play().catch(e => console.log('Audio blocked', e));
 
-    // 2. Usar Síntesis de Voz
     if ('speechSynthesis' in window) {
-      // Cancelar cualquier mensaje anterior para evitar colas extrañas
       window.speechSynthesis.cancel();
-
       const message = new SpeechSynthesisUtterance();
       message.text = `¡Victoria total! Has culminado con éxito tu objetivo: ${state.currentTaskName || 'tu sesión'}. ¡Eres increíble!`;
       message.lang = 'es-ES';
       message.rate = 1.0;
-      message.pitch = 1.1;
-      
       const voices = window.speechSynthesis.getVoices();
       const premiumVoice = voices.find(v => v.lang.startsWith('es') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('es'));
       if (premiumVoice) message.voice = premiumVoice;
-
-      setTimeout(() => {
-        window.speechSynthesis.speak(message);
-      }, 800);
+      setTimeout(() => window.speechSynthesis.speak(message), 800);
     }
   };
 
@@ -226,20 +153,13 @@ const App: React.FC = () => {
       playVictoryAnnouncement();
       return;
     }
-
-    let url = '';
-    switch(type) {
-      case 'success':
-        url = 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3';
-        break;
-      case 'alert':
-      default:
-        url = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
-        break;
-    }
-    const audio = new Audio(url);
+    const urls = {
+      success: 'https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3',
+      alert: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'
+    };
+    const audio = new Audio(urls[type === 'success' ? 'success' : 'alert']);
     audio.play().catch(e => console.log('Audio blocked', e));
-  }, [state.currentTaskName]);
+  }, []);
 
   const handleNextSession = useCallback(() => {
     setState(prev => {
@@ -259,6 +179,8 @@ const App: React.FC = () => {
           settings: { ...settings }
         };
 
+        saveHistoryItem(newTask);
+
         return {
           ...prev,
           status: TimerStatus.FINISHED,
@@ -270,9 +192,9 @@ const App: React.FC = () => {
 
       const nextSession = roadmap[nextIndex];
       let nextTime = 0;
-      if (nextSession === SessionType.WORK) nextTime = settings.workTime * 60;
-      else if (nextSession === SessionType.SHORT_BREAK) nextTime = settings.shortBreakTime * 60;
-      else nextTime = settings.longBreakTime * 60;
+      if (nextSession === SessionType.WORK) nextTime = settings.workTime;
+      else if (nextSession === SessionType.SHORT_BREAK) nextTime = settings.shortBreakTime;
+      else nextTime = settings.longBreakTime;
 
       playNotification('alert');
 
@@ -291,9 +213,7 @@ const App: React.FC = () => {
     playNotification('victory');
     setState(prev => {
       let finalCompleted = prev.completedPomodoros;
-      if (prev.currentSession === SessionType.WORK) {
-        finalCompleted += 1;
-      }
+      if (prev.currentSession === SessionType.WORK) finalCompleted += 1;
 
       const newTask: TaskHistoryItem = {
         id: Date.now().toString(),
@@ -302,6 +222,8 @@ const App: React.FC = () => {
         totalPomos: finalCompleted,
         settings: { ...settings }
       };
+
+      saveHistoryItem(newTask);
 
       return {
         ...prev,
@@ -318,8 +240,7 @@ const App: React.FC = () => {
       timerRef.current = window.setInterval(() => {
         setState(prev => {
           if (prev.timeLeft <= 0) return prev; 
-          const nextTime = prev.timeLeft - 1;
-          return { ...prev, timeLeft: nextTime };
+          return { ...prev, timeLeft: prev.timeLeft - 1 };
         });
       }, 1000);
     } else {
@@ -334,153 +255,163 @@ const App: React.FC = () => {
     }
   }, [state.timeLeft, state.status, handleNextSession]);
 
-  const startTimer = () => {
-    if (!state.currentTaskName) {
-      setIsTaskModalOpen(true);
+  const handleTaskConfirm = (name: string, customSettings?: PomodoroSettings) => {
+    if (isPlannedMode && customSettings) {
+      const newTask: PlannedTask = {
+        id: editingTask ? editingTask.id : Date.now().toString(),
+        name,
+        settings: customSettings,
+        createdAt: editingTask ? editingTask.createdAt : Date.now()
+      };
+      savePlannedTask(newTask);
+      setState(p => ({ 
+        ...p, 
+        plannedTasks: editingTask 
+          ? p.plannedTasks.map(t => t.id === newTask.id ? newTask : t)
+          : [...p.plannedTasks, newTask] 
+      }));
     } else {
-      setState(p => ({...p, status: TimerStatus.RUNNING}));
+      hasAnnouncedVictoryRef.current = false;
+      setState(p => ({...p, currentTaskName: name, status: TimerStatus.RUNNING, timeLeft: settings.workTime}));
     }
-  };
-
-  const handleTaskConfirm = (name: string) => {
-    // Resetear el flag de victoria al confirmar una nueva tarea
-    hasAnnouncedVictoryRef.current = false;
-    setState(p => ({...p, currentTaskName: name, status: TimerStatus.RUNNING}));
     setIsTaskModalOpen(false);
+    setIsPlannedMode(false);
+    setEditingTask(null);
   };
 
-  const resetTimer = useCallback(() => {
-    let nextTime = 0;
-    switch (state.currentSession) {
-      case SessionType.WORK: nextTime = settings.workTime * 60; break;
-      case SessionType.SHORT_BREAK: nextTime = settings.shortBreakTime * 60; break;
-      case SessionType.LONG_BREAK: nextTime = settings.longBreakTime * 60; break;
-    }
-    setState(prev => ({ ...prev, status: TimerStatus.IDLE, timeLeft: nextTime }));
-  }, [settings, state.currentSession]);
-
-  const restartDay = (newSettings?: PomodoroSettings) => {
-    const s = newSettings || settings;
-    const initialRoadmap = generateRoadmap(s);
-    // Resetear el flag de victoria al reiniciar el día
+  const handleStartPlannedTask = (task: PlannedTask) => {
+    setSettings(task.settings);
     hasAnnouncedVictoryRef.current = false;
     setState(prev => ({
       ...prev,
-      currentSession: initialRoadmap[0],
+      currentTaskName: task.name,
+      status: TimerStatus.RUNNING,
+      timeLeft: task.settings.workTime,
+      currentIndex: 0,
+      completedPomodoros: 0,
+      currentSession: SessionType.WORK
+    }));
+    setIsTaskListOpen(false);
+  };
+
+  const handleDeleteTask = async (id: string) => {
+    await deletePlannedTask(id);
+    setState(p => ({ ...p, plannedTasks: p.plannedTasks.filter(t => t.id !== id) }));
+  };
+
+  const handleEditPlannedTask = (task: PlannedTask) => {
+    setEditingTask(task);
+    setIsPlannedMode(true);
+    setIsTaskModalOpen(true);
+  };
+
+  const restartDay = (newSettings?: PomodoroSettings) => {
+    const s = newSettings || settings;
+    hasAnnouncedVictoryRef.current = false;
+    setState(prev => ({
+      ...prev,
+      currentSession: SessionType.WORK,
       status: TimerStatus.IDLE,
-      timeLeft: s.workTime * 60,
+      timeLeft: s.workTime,
       completedPomodoros: 0,
       currentIndex: 0,
       currentTaskName: '',
     }));
   };
 
+  const handleReRunTask = (item: TaskHistoryItem) => {
+    setSettings(item.settings);
+    hasAnnouncedVictoryRef.current = false;
+    setState(prev => ({
+      ...prev,
+      currentTaskName: item.name,
+      status: TimerStatus.RUNNING,
+      timeLeft: item.settings.workTime,
+      currentIndex: 0,
+      completedPomodoros: 0,
+      currentSession: SessionType.WORK
+    }));
+    setIsHistoryOpen(false);
+  };
+
   const currentColor = state.status === TimerStatus.FINISHED 
-    ? { bg: 'bg-amber-50', primary: 'amber-500', text: 'text-amber-600', border: 'border-amber-200', label: '¡Objetivo Logrado!', icon: 'fa-trophy' }
+    ? { bg: 'bg-amber-50', primary: 'amber-500', icon: 'fa-trophy', label: '¡Victoria!' }
     : SESSION_COLORS[state.currentSession];
 
   const totalTimeInSeconds = state.currentSession === SessionType.WORK 
-    ? settings.workTime * 60 
+    ? settings.workTime 
     : state.currentSession === SessionType.SHORT_BREAK 
-      ? settings.shortBreakTime * 60 
-      : settings.longBreakTime * 60;
+      ? settings.shortBreakTime 
+      : settings.longBreakTime;
 
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center transition-all duration-1000 p-4 ${currentColor.bg}`}>
-      
       {state.status === TimerStatus.FINISHED && <Confetti />}
-
-      <canvas ref={canvasRef} width="200" height="200" className="opacity-0 pointer-events-none absolute -z-10" />
-      <video ref={videoRef} className="opacity-0 pointer-events-none absolute -z-10 w-1 h-1" muted playsInline />
 
       <header className="fixed top-0 left-0 right-0 p-4 sm:p-8 flex justify-between items-center max-w-7xl mx-auto w-full z-10">
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-xl shadow-slate-200/50 rotate-3 p-1">
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center shadow-xl rotate-3 p-1">
             <svg viewBox="0 0 32 32" className="w-full h-full">
               <path d="M16 6c-6.6 0-12 4.4-12 10 0 5.5 5.4 10 12 10s12-4.5 12-10c0-5.6-5.4-10-12-10z" fill="#F43F5E" />
               <path d="M16 8c0-2 1-4 1-4s-2 1-3 3c-1-2-3-3-3-3s1 2 1 4c-2 0-4 1-4 1s2 1 3 1c1 2 2 3 2 3s0-2 1-4c1 2 2 3 2 3s-1-2-1-4c2 0 4-1 4-1s-2-1-3-1z" fill="#22C55E" />
             </svg>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-800">ZenPomo<span className={`text-${currentColor.primary} opacity-50`}>.</span></h1>
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-800">ZenPomo.</h1>
         </div>
         
-        <div className="flex gap-2 sm:gap-4">
-          <button 
-            onClick={togglePiP}
-            title="Modo flotante"
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-white/40 backdrop-blur-md border border-white/50 hover:bg-white shadow-sm transition-all text-slate-600 active:scale-95"
-          >
-            <i className="fa-solid fa-thumbtack text-base sm:text-lg"></i>
+        <div className="flex gap-2 sm:gap-3">
+          <button onClick={() => setIsManualOpen(true)} className="h-10 sm:h-12 px-3 sm:px-5 rounded-full flex items-center justify-center gap-2 bg-white/40 backdrop-blur-md border border-white/50 hover:bg-white shadow-sm transition-all text-slate-600 font-bold text-[10px] sm:text-xs tracking-widest uppercase" title="Manual de Uso">
+            <i className="fa-solid fa-book-open"></i>
+            <span className="hidden lg:inline">Manual</span>
           </button>
           
-          <button 
-            onClick={() => setIsManualOpen(true)} 
-            className="h-10 sm:h-12 px-3 sm:px-5 rounded-full flex items-center justify-center gap-2 bg-white/40 backdrop-blur-md border border-white/50 hover:bg-white shadow-sm transition-all text-slate-600 active:scale-95 font-bold text-[10px] sm:text-xs uppercase tracking-widest"
-          >
-            <i className="fa-solid fa-book-open"></i>
-            <span className="hidden sm:inline">Manual</span>
+          <button onClick={() => setIsTaskListOpen(true)} className="h-10 sm:h-12 px-3 sm:px-5 rounded-full flex items-center justify-center gap-2 bg-white/40 backdrop-blur-md border border-white/50 hover:bg-white shadow-sm transition-all text-slate-600 font-bold text-[10px] sm:text-xs tracking-widest uppercase" title="Tareas Planificadas">
+            <i className="fa-solid fa-list-check"></i>
+            <span className="hidden lg:inline">Plan</span>
           </button>
 
-          <button 
-            onClick={() => setIsHistoryOpen(true)} 
-            className="h-10 sm:h-12 px-3 sm:px-5 rounded-full flex items-center justify-center gap-2 bg-white/40 backdrop-blur-md border border-white/50 hover:bg-white shadow-sm transition-all text-slate-600 active:scale-95 font-bold text-[10px] sm:text-xs uppercase tracking-widest"
-          >
+          <button onClick={() => setIsHistoryOpen(true)} className="h-10 sm:h-12 px-3 sm:px-5 rounded-full flex items-center justify-center gap-2 bg-white/40 backdrop-blur-md border border-white/50 hover:bg-white shadow-sm transition-all text-slate-600 font-bold text-[10px] sm:text-xs tracking-widest uppercase" title="Ver Historial">
             <i className="fa-solid fa-clock-rotate-left"></i>
-            <span className="hidden sm:inline">Historial</span>
+            <span className="hidden lg:inline">Historial</span>
           </button>
 
-          <button 
-            onClick={() => setIsSettingsOpen(true)} 
-            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-white/40 backdrop-blur-md border border-white/50 hover:bg-white shadow-sm transition-all text-slate-600 active:scale-95"
-          >
-            <i className="fa-solid fa-sliders text-lg sm:text-xl"></i>
+          <button onClick={() => setIsSettingsOpen(true)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center bg-white/40 backdrop-blur-md border border-white/50 hover:bg-white shadow-sm transition-all text-slate-600" title="Configuraciones">
+            <i className="fa-solid fa-sliders text-lg"></i>
           </button>
         </div>
       </header>
 
-      <main className="w-full max-w-xl flex flex-col items-center space-y-12 py-24 sm:py-20 relative">
-        <SessionIndicator 
-          roadmap={roadmap}
-          currentIndex={state.currentIndex}
-          timeLeft={state.timeLeft}
-          totalTime={totalTimeInSeconds}
-          colorClass={currentColor.primary}
-          currentSession={state.currentSession}
-          taskName={state.status !== TimerStatus.FINISHED ? state.currentTaskName : undefined}
-        />
-
-        <div className="flex flex-col items-center w-full animate-in fade-in zoom-in duration-1000">
-          <TimerDisplay 
-            timeLeft={state.timeLeft} 
-            totalTime={totalTimeInSeconds}
-            colorClass={currentColor.primary}
-            isFinished={state.status === TimerStatus.FINISHED}
-            sessionIcon={currentColor.icon}
-            sessionLabel={currentColor.label}
-          />
-        </div>
-
+      <main className="w-full max-w-xl flex flex-col items-center space-y-12 py-24 sm:py-20">
+        <SessionIndicator roadmap={roadmap} currentIndex={state.currentIndex} timeLeft={state.timeLeft} totalTime={totalTimeInSeconds} colorClass={currentColor.primary} currentSession={state.currentSession} taskName={state.status !== TimerStatus.FINISHED ? state.currentTaskName : undefined} />
+        <TimerDisplay timeLeft={state.timeLeft} totalTime={totalTimeInSeconds} colorClass={currentColor.primary} isFinished={state.status === TimerStatus.FINISHED} sessionIcon={currentColor.icon} sessionLabel={currentColor.label} />
         {state.status === TimerStatus.FINISHED ? (
-          <button onClick={() => restartDay()} className="flex items-center gap-3 bg-slate-900 text-white px-10 py-5 rounded-[2.5rem] font-black uppercase tracking-widest text-sm hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-slate-300">
-            <i className="fa-solid fa-rotate-right"></i> Nueva Tarea
-          </button>
+          <button onClick={() => restartDay()} className="flex items-center gap-3 bg-slate-900 text-white px-10 py-5 rounded-[2.5rem] font-black uppercase tracking-widest text-sm hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-slate-300"><i className="fa-solid fa-rotate-right"></i> Nueva Tarea</button>
         ) : (
-          <Controls 
-            status={state.status}
-            onStart={startTimer}
-            onPause={() => setState(p => ({...p, status: TimerStatus.PAUSED}))}
-            onReset={resetTimer}
-            onFinish={handleNextSession}
-            onCompleteTask={handleCompleteTask}
-            colorClass={currentColor.primary}
-          />
+          <Controls status={state.status} onStart={() => !state.currentTaskName ? setIsTaskModalOpen(true) : setState(p => ({...p, status: TimerStatus.RUNNING}))} onPause={() => setState(p => ({...p, status: TimerStatus.PAUSED}))} onReset={() => setState(prev => ({ ...prev, status: TimerStatus.IDLE, timeLeft: (state.currentSession === SessionType.WORK ? settings.workTime : state.currentSession === SessionType.SHORT_BREAK ? settings.shortBreakTime : settings.longBreakTime) }))} onFinish={handleNextSession} onCompleteTask={handleCompleteTask} colorClass={currentColor.primary} />
         )}
       </main>
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} settings={settings} onSave={(s) => { setSettings(s); restartDay(s); }} />
-      <TaskModal isOpen={isTaskModalOpen} onConfirm={handleTaskConfirm} onCancel={() => setIsTaskModalOpen(false)} />
-      <HistorySidebar isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} history={state.history} onClear={() => setState(p => ({...p, history: []}))} />
+      <TaskModal 
+        isOpen={isTaskModalOpen} 
+        isPlannedMode={isPlannedMode} 
+        initialData={editingTask}
+        onConfirm={handleTaskConfirm} 
+        onCancel={() => { setIsTaskModalOpen(false); setIsPlannedMode(false); setEditingTask(null); }} 
+      />
+      <HistorySidebar isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} history={state.history} onClear={() => { clearAllHistory(); setState(p => ({...p, history: []})); }} onImport={(items) => { importHistory(items); getAllHistory().then(h => setState(p => ({...p, history: h}))); }} onReRunTask={handleReRunTask} />
+      <TaskListSidebar 
+        isOpen={isTaskListOpen} 
+        onClose={() => setIsTaskListOpen(false)} 
+        tasks={state.plannedTasks} 
+        onAddTask={() => { setIsPlannedMode(true); setIsTaskModalOpen(true); setEditingTask(null); }} 
+        onDeleteTask={handleDeleteTask} 
+        onEditTask={handleEditPlannedTask}
+        onStartTask={handleStartPlannedTask} 
+        onOpenReport={() => setIsReportOpen(true)}
+      />
       <ManualModal isOpen={isManualOpen} onClose={() => setIsManualOpen(false)} settings={settings} />
+      <ReportModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} history={state.history} plannedTasks={state.plannedTasks} />
     </div>
   );
 };

@@ -2,9 +2,9 @@
 import { PomodoroSettings, SessionType } from './types';
 
 export const DEFAULT_SETTINGS: PomodoroSettings = {
-  workTime: 25,       
-  shortBreakTime: 5, 
-  longBreakTime: 15,  
+  workTime: 25 * 60,       // 25 minutos en segundos
+  shortBreakTime: 5 * 60,  // 5 minutos en segundos
+  longBreakTime: 15 * 60,  // 15 minutos en segundos
   pomsPerSet: 4,  
   setsGoal: 0,    
 };
@@ -16,7 +16,7 @@ export const SESSION_COLORS = {
     hex: '#F43F5E',
     text: 'text-rose-600',
     border: 'border-rose-100',
-    label: 'Tiempo de Enfoque',
+    label: 'Tiempo de Pomodoro',
     icon: 'fa-brain'
   },
   [SessionType.SHORT_BREAK]: {

@@ -18,8 +18,9 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
   sessionIcon = 'fa-brain',
   sessionLabel
 }) => {
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
+  const h = Math.floor(timeLeft / 3600);
+  const m = Math.floor((timeLeft % 3600) / 60);
+  const s = timeLeft % 60;
   
   const percentage = isFinished ? 100 : (timeLeft / totalTime) * 100;
   const radius = 140;
@@ -28,38 +29,17 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
 
   return (
     <div className="relative flex items-center justify-center w-64 h-64 sm:w-80 sm:h-80 md:w-[400px] md:h-[400px] group select-none">
-      {/* Glow Effect */}
       <div className={`absolute inset-16 rounded-full blur-[60px] opacity-10 transition-all duration-1000 bg-${colorClass} group-hover:scale-110`}></div>
-      
-      {/* Main Circle */}
       <div className="absolute inset-0 rounded-full bg-white shadow-[inset_0_2px_10px_rgba(0,0,0,0.01),0_20px_50px_rgba(0,0,0,0.04)] border-[10px] sm:border-[14px] border-white"></div>
 
-      {/* SVG Progress Ring */}
       <svg className="absolute inset-0 w-full h-full -rotate-90 p-1 sm:p-2" viewBox="0 0 320 320">
+        <circle cx="160" cy="160" r={radius} fill="transparent" stroke="#F8FAFC" strokeWidth="10" strokeLinecap="round" />
         <circle
-          cx="160"
-          cy="160"
-          r={radius}
-          fill="transparent"
-          stroke="#F8FAFC"
-          strokeWidth="10"
-          strokeLinecap="round"
-        />
-        <circle
-          cx="160"
-          cy="160"
-          r={radius}
-          fill="transparent"
-          stroke="currentColor"
-          strokeWidth="10"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          className={`transition-all duration-1000 ease-linear text-${colorClass}`}
+          cx="160" cy="160" r={radius} fill="transparent" stroke="currentColor" strokeWidth="10" strokeDasharray={circumference}
+          strokeDashoffset={offset} strokeLinecap="round" className={`transition-all duration-1000 ease-linear text-${colorClass}`}
         />
       </svg>
 
-      {/* Central Content */}
       <div className="relative flex flex-col items-center justify-center w-full z-10 px-4 text-center">
         {isFinished ? (
           <div className="flex flex-col items-center animate-in zoom-in duration-1000">
@@ -77,8 +57,8 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
               <i className={`fa-solid ${sessionIcon} text-lg sm:text-2xl`}></i>
             </div>
             
-            <span className="text-5xl sm:text-7xl md:text-8xl font-medium tracking-tight text-slate-900 mono tabular-nums leading-tight overflow-hidden whitespace-nowrap">
-              {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+            <span className={`${h > 0 ? 'text-4xl sm:text-5xl md:text-6xl' : 'text-5xl sm:text-7xl md:text-8xl'} font-medium tracking-tight text-slate-900 mono tabular-nums leading-tight overflow-hidden whitespace-nowrap`}>
+              {h > 0 && <span>{String(h).padStart(2, '0')}:</span>}{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
             </span>
 
             {sessionLabel && (

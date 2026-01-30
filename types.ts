@@ -13,11 +13,18 @@ export enum TimerStatus {
 }
 
 export interface PomodoroSettings {
-  workTime: number; 
-  shortBreakTime: number; 
-  longBreakTime: number; 
+  workTime: number; // Segundos totales
+  shortBreakTime: number; // Segundos totales
+  longBreakTime: number; // Segundos totales
   pomsPerSet: number;    
   setsGoal: number;      
+}
+
+export interface PlannedTask {
+  id: string;
+  name: string;
+  settings: PomodoroSettings;
+  createdAt: number;
 }
 
 export interface TaskHistoryItem {
@@ -25,7 +32,7 @@ export interface TaskHistoryItem {
   name: string;
   date: string;
   totalPomos: number;
-  settings: PomodoroSettings; // Nueva propiedad para auditoría y análisis
+  settings: PomodoroSettings;
 }
 
 export interface PomodoroState {
@@ -36,4 +43,5 @@ export interface PomodoroState {
   currentIndex: number;
   currentTaskName: string;
   history: TaskHistoryItem[];
+  plannedTasks: PlannedTask[];
 }
